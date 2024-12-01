@@ -1,0 +1,186 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc
+from xgboost import XGBClassifier
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+# Load and prepare the data
+def load_and_prepare_data(file_path):
+    # Load the data
+    df = pd.read_csv(file_path)
+
+    # Separate features and target
+    X = df.drop(['Diagnosis', 'DoctorInCharge', 'PatientID'], axis=1)
+    y = df['Diagnosis']
+
+    # Identify numeric and categorical columns
+    numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
+    categorical_features = X.select_dtypes(include=['object']).columns
+
+    return X, y, numeric_features, categorical_features
+
+# Create preprocessing pipeline
+def create_preprocessing_pipeline(numeric_features, categorical_features):
+    numeric_transformer = StandardScaler()
+
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', numeric_transformer, numeric_features),
+            ('cat', LabelEncoder(), categorical_features)
+        ])
+
+    return preprocessor
+
+# Create and train the model
+def train_model(X, y, preprocessor):
+    # Split the data
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    # Create pipeline
+    model = Pipeline([
+        ('preprocessor', preprocessor),
+        ('classifier', XGBClassifier(
+            colsample_bytree=0.8,
+            gamma=0.1,
+            learning_rate=0.05,
+            max_depth=10,
+            min_child_weight=10,
+            n_estimators=100,
+            subsample=0.7,
+            random_state=42
+        ))
+    ])
+
+    # Train the model
+    model.fit(X_train, y_train)
+
+    return model, X_train, X_test, y_train, y_test
+
+# Perform cross-validation
+def perform_cross_validation(model, X, y):
+    cv_scores = cross_val_score(model, X, y, cv=7, scoring='roc_auc')
+    print("\nCross-validation scores:", cv_scores)
+    print("Mean CV score:", cv_scores.mean())
+    print("CV score std:", cv_scores.std())
+
+# Evaluate the model
+def evaluate_model(model, X_test, y_test):
+    # Make predictions
+    y_pred = model.predict(X_test)
+    y_pred_proba = model.predict_proba(X_test)[:,1]
+
+    # Print classification report
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred))
+
+    # Calculate and plot ROC curve
+    fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(fpr, tpr, color='darkorange', lw=2,
+             label=f'ROC curve (AUC = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic (ROC) Curve')
+    plt.legend(loc="lower right")
+    plt.show()
+
+    # Plot confusion matrix
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.title('Confusion Matrix')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.show()
+
+# Feature importance analysis
+def analyze_feature_importance(model, X):
+    # Get feature importance from the model
+    importance = model.named_steps['classifier'].feature_importances_
+
+    # Create DataFrame of features and their importance scores
+    feature_importance = pd.DataFrame({
+        'feature': X.columns,
+        'importance': importance
+    }).sort_values('importance', ascending=False)
+
+    # Plot feature importance
+    plt.figure(figsize=(12, 6))
+    sns.barplot(x='importance', y='feature', data=feature_importance.head(15))
+    plt.title('Top 15 Most Important Features')
+    plt.show()
+
+    return feature_importance
+
+# # Hyperparameter tuning
+# def tune_hyperparameters(X_train, y_train, preprocessor):
+#     param_grid = {
+#         'classifier__max_depth': [15],
+#         'classifier__learning_rate': [0.05],
+#         'classifier__n_estimators': [200],
+#         'classifier__min_child_weight': [5]
+#     }
+
+#     pipeline = Pipeline([
+#         ('preprocessor', preprocessor),
+#         ('classifier', XGBClassifier(random_state=5))
+#     ])
+
+#     grid_search = GridSearchCV(
+#         pipeline, param_grid, cv=7, scoring='roc_auc', n_jobs=-1
+#     )
+#     grid_search.fit(X_train, y_train)
+
+#     print("\nBest parameters:", grid_search.best_params_)
+#     print("Best cross-validation score:", grid_search.best_score_)
+
+#     return grid_search.best_estimator_
+
+# Main execution
+def main():
+    # Load and prepare data
+    X, y, numeric_features, categorical_features = load_and_prepare_data('train.csv')
+
+    # Create preprocessor
+    preprocessor = create_preprocessing_pipeline(numeric_features, categorical_features)
+
+    # Train initial model
+    print("Training initial model...")
+    model, X_train, X_test, y_train, y_test = train_model(X, y, preprocessor)
+
+    # Perform cross-validation
+    print("\nPerforming cross-validation...")
+    perform_cross_validation(model, X, y)
+
+    # Evaluate model
+    print("\nEvaluating model...")
+    evaluate_model(model, X_test, y_test)
+
+    # Analyze feature importance
+    print("\nAnalyzing feature importance...")
+    feature_importance = analyze_feature_importance(model, X)
+
+    # # Perform hyperparameter tuning
+    # print("\nPerforming hyperparameter tuning...")
+    # best_model = tune_hyperparameters(X_train, y_train, preprocessor)
+
+    # # Evaluate best model
+    # print("\nEvaluating best model...")
+    # evaluate_model(best_model, X_test, y_test)
+
+
+
+if __name__ == "__main__":
+    main()
