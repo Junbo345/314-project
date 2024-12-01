@@ -2,7 +2,8 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, roc_auc_score, roc_curve
+from sklearn.metrics import classification_report, roc_auc_score, roc_curve, confusion_matrix
+import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Load the train and test datasets
@@ -33,6 +34,19 @@ y_val_pred_proba = logreg.predict_proba(X_val_scaled)[:, 1]  # Probabilities for
 
 print('Classification Report on Validation Data:')
 print(classification_report(y_val, y_val_pred))
+
+# Confusion Matrix
+conf_matrix = confusion_matrix(y_val, y_val_pred)
+print('Confusion Matrix:')
+print(conf_matrix)
+
+# Plot Confusion Matrix as a Heatmap
+plt.figure(figsize=(8, 6))
+sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=['Negative', 'Positive'], yticklabels=['Negative', 'Positive'])
+plt.title('Confusion Matrix')
+plt.xlabel('Predicted Labels')
+plt.ylabel('True Labels')
+plt.show()
 
 # Calculate AUC on the validation data
 auc_score = roc_auc_score(y_val, y_val_pred_proba)
