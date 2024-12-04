@@ -1,13 +1,16 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc
 from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+
+# Apply Seaborn style globally
+sns.set_theme(style="whitegrid", context="talk", palette="muted")
 
 # Load and prepare the data
 def load_and_prepare_data(file_path):
@@ -28,11 +31,13 @@ def load_and_prepare_data(file_path):
 def create_preprocessing_pipeline(numeric_features, categorical_features):
     numeric_transformer = StandardScaler()
 
+    # Preprocessing pipeline
     preprocessor = ColumnTransformer(
         transformers=[
-            ('num', numeric_transformer, numeric_features),
-            ('cat', LabelEncoder(), categorical_features)
-        ])
+            ('num', numeric_transformer, numeric_features)
+        ],
+        remainder='passthrough'  # Pass through categorical features unchanged
+    )
 
     return preprocessor
 
@@ -74,35 +79,39 @@ def perform_cross_validation(model, X, y):
 def evaluate_model(model, X_test, y_test):
     # Make predictions
     y_pred = model.predict(X_test)
-    y_pred_proba = model.predict_proba(X_test)[:,1]
+    y_pred_proba = model.predict_proba(X_test)[:, 1]
 
     # Print classification report
     print("\nClassification Report:")
     print(classification_report(y_test, y_pred))
 
-    # Calculate and plot ROC curve
+    # Plot ROC curve
     fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
     roc_auc = auc(fpr, tpr)
 
     plt.figure(figsize=(10, 6))
-    plt.plot(fpr, tpr, color='darkorange', lw=2,
-             label=f'ROC curve (AUC = {roc_auc:.2f})')
-    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver Operating Characteristic (ROC) Curve')
-    plt.legend(loc="lower right")
+    sns.lineplot(x=fpr, y=tpr, label=f'ROC curve (AUC = {roc_auc:.2f})', color='darkorange')
+    plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
+    plt.xlabel('False Positive Rate', fontsize=14)
+    plt.ylabel('True Positive Rate', fontsize=14)
+    plt.title('Receiver Operating Characteristic (ROC) Curve', fontsize=16)
+    plt.legend(loc="lower right", fontsize=12)
     plt.show()
 
     # Plot confusion matrix
     cm = confusion_matrix(y_test, y_pred)
     plt.figure(figsize=(8, 6))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-    plt.title('Confusion Matrix')
-    plt.ylabel('True Label')
-    plt.xlabel('Predicted Label')
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt='d',
+        cmap='Blues',
+        xticklabels=['Negative', 'Positive'],
+        yticklabels=['Negative', 'Positive']
+    )
+    plt.title('Confusion Matrix', fontsize=16)
+    plt.xlabel('Predicted Labels', fontsize=14)
+    plt.ylabel('True Labels', fontsize=14)
     plt.show()
 
 # Feature importance analysis
@@ -118,35 +127,13 @@ def analyze_feature_importance(model, X):
 
     # Plot feature importance
     plt.figure(figsize=(12, 6))
-    sns.barplot(x='importance', y='feature', data=feature_importance.head(15))
-    plt.title('Top 15 Most Important Features')
+    sns.barplot(x='importance', y='feature', data=feature_importance.head(15), palette='viridis')
+    plt.title('Top 15 Most Important Features', fontsize=16)
+    plt.xlabel('Feature Importance', fontsize=14)
+    plt.ylabel('Features', fontsize=14)
     plt.show()
 
     return feature_importance
-
-# # Hyperparameter tuning
-# def tune_hyperparameters(X_train, y_train, preprocessor):
-#     param_grid = {
-#         'classifier__max_depth': [15],
-#         'classifier__learning_rate': [0.05],
-#         'classifier__n_estimators': [200],
-#         'classifier__min_child_weight': [5]
-#     }
-
-#     pipeline = Pipeline([
-#         ('preprocessor', preprocessor),
-#         ('classifier', XGBClassifier(random_state=5))
-#     ])
-
-#     grid_search = GridSearchCV(
-#         pipeline, param_grid, cv=7, scoring='roc_auc', n_jobs=-1
-#     )
-#     grid_search.fit(X_train, y_train)
-
-#     print("\nBest parameters:", grid_search.best_params_)
-#     print("Best cross-validation score:", grid_search.best_score_)
-
-#     return grid_search.best_estimator_
 
 # Main execution
 def main():
@@ -170,17 +157,7 @@ def main():
 
     # Analyze feature importance
     print("\nAnalyzing feature importance...")
-    feature_importance = analyze_feature_importance(model, X)
-
-    # # Perform hyperparameter tuning
-    # print("\nPerforming hyperparameter tuning...")
-    # best_model = tune_hyperparameters(X_train, y_train, preprocessor)
-
-    # # Evaluate best model
-    # print("\nEvaluating best model...")
-    # evaluate_model(best_model, X_test, y_test)
-
-
+    analyze_feature_importance(model, X)
 
 if __name__ == "__main__":
     main()
