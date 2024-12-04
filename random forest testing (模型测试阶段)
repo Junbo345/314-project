@@ -1,0 +1,163 @@
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+# Apply Seaborn style globally
+sns.set_theme(style="whitegrid", context="talk", palette="muted")
+
+# Load and prepare the data
+def load_and_prepare_data(file_path):
+    # Load the data
+    df = pd.read_csv(file_path)
+
+    # Separate features and target
+    X = df.drop(['Diagnosis', 'DoctorInCharge', 'PatientID'], axis=1)
+    y = df['Diagnosis']
+
+    # Identify numeric and categorical columns
+    numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
+    categorical_features = X.select_dtypes(include=['object']).columns
+
+    return X, y, numeric_features, categorical_features
+
+# Create preprocessing pipeline
+def create_preprocessing_pipeline(numeric_features, categorical_features):
+    numeric_transformer = StandardScaler()
+
+    # Preprocessing pipeline
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ('num', numeric_transformer, numeric_features)
+        ],
+        remainder='passthrough'  # Pass through categorical features unchanged
+    )
+
+    return preprocessor
+
+# Create and train the Random Forest model
+def train_random_forest(X, y, preprocessor):
+    # Split the data
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    # Random Forest classifier
+    classifier = RandomForestClassifier(
+        n_estimators=100,
+        max_depth=10,
+        min_samples_split=10,
+        random_state=42,
+        class_weight="balanced"
+    )
+
+    # Create pipeline
+    model = Pipeline([
+        ('preprocessor', preprocessor),
+        ('classifier', classifier)
+    ])
+
+    # Train the model
+    model.fit(X_train, y_train)
+
+    return model, X_train, X_test, y_train, y_test
+
+# Perform cross-validation
+def perform_cross_validation(model, X, y):
+    cv_scores = cross_val_score(model, X, y, cv=7, scoring='roc_auc')
+    print("\nCross-validation scores:", cv_scores)
+    print("Mean CV score:", cv_scores.mean())
+    print("CV score std:", cv_scores.std())
+
+# Evaluate the model
+def evaluate_model(model, X_test, y_test):
+    # Make predictions
+    y_pred = model.predict(X_test)
+    y_pred_proba = model.predict_proba(X_test)[:, 1]
+
+    # Print classification report
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred))
+
+    # Plot ROC curve
+    fpr, tpr, _ = roc_curve(y_test, y_pred_proba)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure(figsize=(10, 6))
+    sns.lineplot(x=fpr, y=tpr, label=f'ROC curve (AUC = {roc_auc:.2f})', color='darkorange')
+    plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
+    plt.xlabel('False Positive Rate', fontsize=14)
+    plt.ylabel('True Positive Rate', fontsize=14)
+    plt.title('Receiver Operating Characteristic (ROC) Curve', fontsize=16)
+    plt.legend(loc="lower right", fontsize=12)
+    plt.show()
+
+    # Plot confusion matrix
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(
+        cm, 
+        annot=True, 
+        fmt='d', 
+        cmap='Blues', 
+        xticklabels=['Negative', 'Positive'], 
+        yticklabels=['Negative', 'Positive']
+    )
+    plt.title('Confusion Matrix', fontsize=16)
+    plt.xlabel('Predicted Labels', fontsize=14)
+    plt.ylabel('True Labels', fontsize=14)
+    plt.show()
+
+# Feature importance analysis
+def analyze_feature_importance(model, X):
+    # Get feature importance from the model
+    importance = model.named_steps['classifier'].feature_importances_
+
+    # Create DataFrame of features and their importance scores
+    feature_importance = pd.DataFrame({
+        'feature': X.columns,
+        'importance': importance
+    }).sort_values('importance', ascending=False)
+
+    # Plot feature importance
+    plt.figure(figsize=(12, 6))
+    sns.barplot(x='importance', y='feature', data=feature_importance.head(15), palette='viridis')
+    plt.title('Top 15 Most Important Features', fontsize=16)
+    plt.xlabel('Feature Importance', fontsize=14)
+    plt.ylabel('Features', fontsize=14)
+    plt.show()
+
+    return feature_importance
+
+# Main execution
+def main():
+    # Load and prepare data
+    X, y, numeric_features, categorical_features = load_and_prepare_data('train.csv')
+
+    # Create preprocessor
+    preprocessor = create_preprocessing_pipeline(numeric_features, categorical_features)
+
+    # Train Random Forest model
+    print("Training Random Forest model...")
+    rf_model, X_train, X_test, y_train, y_test = train_random_forest(X, y, preprocessor)
+
+    # Perform cross-validation
+    print("\nPerforming cross-validation...")
+    perform_cross_validation(rf_model, X, y)
+
+    # Evaluate model
+    print("\nEvaluating Random Forest model...")
+    evaluate_model(rf_model, X_test, y_test)
+
+    # Analyze feature importance
+    print("\nAnalyzing feature importance...")
+    analyze_feature_importance(rf_model, X)
+
+if __name__ == "__main__":
+    main()
